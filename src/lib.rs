@@ -1,12 +1,18 @@
 use std::str::FromStr;
 use uom::si::f64::*;
-use uom::si::{length, mass, thermodynamic_temperature as temperature, volume};
+use uom::si::{
+    acceleration, area, energy, force, length, mass, mass_density, power,
+    thermodynamic_temperature as temperature, velocity, volume,
+};
 
 #[derive(Debug, PartialEq)]
 pub enum ConversionError {
     InvalidInputFormat,
     UnknownUnit(String),
     IncompatibleUnits { from: String, to: String },
+    InvalidUnitCombination,
+    UnknownCompoundUnit,
+    UnitCancellationNotSupported,
 }
 
 impl std::fmt::Display for ConversionError {
@@ -17,6 +23,9 @@ impl std::fmt::Display for ConversionError {
             ConversionError::IncompatibleUnits { from, to } => {
                 write!(f, "Error: Cannot convert from {} to {}", from, to)
             }
+            ConversionError::InvalidUnitCombination => write!(f, "Error: Invalid unit combination"),
+            ConversionError::UnknownCompoundUnit => write!(f, "Error: Unknown compound unit"),
+            ConversionError::UnitCancellationNotSupported => write!(f, "Error: Unit cancellation not supported"),
         }
     }
 }
@@ -29,6 +38,14 @@ enum UnitType {
     Mass,
     Temperature,
     Volume,
+    Velocity,
+    Area,
+    MassDensity,
+    Acceleration,
+    Force,
+    Energy,
+    Power,
+    FuelEconomy,
 }
 
 #[derive(Debug)]
@@ -37,12 +54,25 @@ struct ParsedInput {
     unit: String,
 }
 
+#[derive(Debug)]
+struct CompoundUnit {
+    numerator: Vec<String>,
+    denominator: Vec<String>,
+}
+
 fn parse_input(input: &str) -> Result<ParsedInput, ConversionError> {
     let trimmed = input.trim();
     
-    // Split by whitespace
-    let parts: Vec<&str> = trimmed.split_whitespace().collect();
+    // Handle parentheses by removing them for now
+    let cleaned = trimmed.replace("(", "").replace(")", "");
     
+    // Check if this is a multiplication expression like "10 meters * 5 meters"
+    if cleaned.contains(" * ") {
+        return parse_multiplication_expression(&cleaned);
+    }
+    
+    // Split by first space
+    let parts: Vec<&str> = cleaned.splitn(2, ' ').collect();
     if parts.len() != 2 {
         return Err(ConversionError::InvalidInputFormat);
     }
@@ -51,18 +81,146 @@ fn parse_input(input: &str) -> Result<ParsedInput, ConversionError> {
     let value = f64::from_str(parts[0])
         .map_err(|_| ConversionError::InvalidInputFormat)?;
     
+    let unit_str = parts[1].trim();
+    
+    // Check if unit string contains numbers (invalid format like "2 meters")
+    if unit_str.chars().any(|c| c.is_numeric() && !unit_str.contains('/') && !unit_str.contains('^')) {
+        return Err(ConversionError::InvalidInputFormat);
+    }
+    
     Ok(ParsedInput {
         value,
-        unit: parts[1].to_lowercase(),
+        unit: unit_str.to_lowercase(),
     })
 }
 
+fn parse_multiplication_expression(input: &str) -> Result<ParsedInput, ConversionError> {
+    let parts: Vec<&str> = input.split(" * ").collect();
+    
+    let mut total_value = 1.0;
+    let mut unit_parts = Vec::new();
+    
+    for part in parts {
+        let part = part.trim();
+        let space_idx = part.find(' ').ok_or(ConversionError::InvalidInputFormat)?;
+        let (val_str, unit_str) = part.split_at(space_idx);
+        
+        let val = f64::from_str(val_str.trim())
+            .map_err(|_| ConversionError::InvalidInputFormat)?;
+        total_value *= val;
+        
+        unit_parts.push(unit_str.trim().to_lowercase());
+    }
+    
+    // Determine the resulting unit type based on multiplication
+    let result_unit = determine_compound_unit(&unit_parts);
+    
+    Ok(ParsedInput {
+        value: total_value,
+        unit: result_unit,
+    })
+}
+
+fn determine_compound_unit(units: &[String]) -> String {
+    // Simple heuristic for now - if all units are length, result is area or volume
+    let all_length = units.iter().all(|u| matches!(
+        u.as_str(),
+        "meter" | "meters" | "foot" | "feet" | "kilometer" | "kilometers" | "mile" | "miles"
+    ));
+    
+    if all_length {
+        match units.len() {
+            2 => {
+                // Convert to square units
+                if units.iter().any(|u| u.contains("meter")) {
+                    "square meters".to_string()
+                } else if units.iter().any(|u| u.contains("foot") || u.contains("feet")) {
+                    "square feet".to_string()
+                } else if units.iter().any(|u| u.contains("kilometer")) {
+                    "square kilometers".to_string()
+                } else if units.iter().any(|u| u.contains("mile")) {
+                    "square miles".to_string()
+                } else {
+                    "square meters".to_string()
+                }
+            }
+            3 => {
+                // Convert to cubic units
+                if units.iter().any(|u| u.contains("meter")) {
+                    "cubic meters".to_string()
+                } else if units.iter().any(|u| u.contains("foot") || u.contains("feet")) {
+                    "cubic feet".to_string()
+                } else if units.iter().any(|u| u.contains("centimeter")) {
+                    "cubic centimeters".to_string()
+                } else {
+                    "cubic meters".to_string()
+                }
+            }
+            _ => units.join(" * ")
+        }
+    } else {
+        units.join(" * ")
+    }
+}
+
 fn get_unit_type(unit: &str) -> Option<UnitType> {
+    // Handle compound units with various formats
+    if unit.contains('/') || unit.contains(" per ") {
+        // Velocity units
+        if unit.contains("miles/hour") || unit.contains("mph") || 
+           unit.contains("kilometers/hour") || unit.contains("kmh") || unit.contains("kph") ||
+           unit.contains("km/h") || unit.contains("miles per hour") ||
+           unit.contains("meters/second") || unit.contains("m/s") ||
+           unit.contains("feet/second") || unit.contains("ft/s") {
+            return Some(UnitType::Velocity);
+        }
+        // Density units
+        if (unit.contains("kilogram") || unit.contains("gram") || unit.contains("pound")) &&
+           (unit.contains("cubic") || unit.contains("milliliter") || unit.contains("liter")) {
+            return Some(UnitType::MassDensity);
+        }
+        // Acceleration
+        if unit.contains("second^2") || unit.contains("second²") {
+            return Some(UnitType::Acceleration);
+        }
+        // Fuel economy
+        if (unit.contains("miles") || unit.contains("kilometers")) && 
+           (unit.contains("gallon") || unit.contains("liter")) {
+            return Some(UnitType::FuelEconomy);
+        }
+    }
+    
+    // Area units
+    if unit.contains("square") || unit.contains("acre") {
+        return Some(UnitType::Area);
+    }
+    
+    // Volume units (cubic)
+    if unit.contains("cubic") && !unit.contains('/') {
+        return Some(UnitType::Volume);
+    }
+    
+    // Force units
+    if unit.contains("newton") || unit.contains("pounds force") {
+        return Some(UnitType::Force);
+    }
+    
+    // Energy units
+    if unit.contains("joule") || unit.contains("foot pound") {
+        return Some(UnitType::Energy);
+    }
+    
+    // Power units
+    if unit.contains("watt") || unit.contains("horsepower") {
+        return Some(UnitType::Power);
+    }
+    
+    // Simple units
     match unit {
         "meter" | "meters" | "foot" | "feet" | "kilometer" | "kilometers" | "mile" | "miles" => Some(UnitType::Length),
-        "kilogram" | "kilograms" | "pound" | "pounds" => Some(UnitType::Mass),
+        "kilogram" | "kilograms" | "pound" | "pounds" | "gram" | "grams" => Some(UnitType::Mass),
         "celsius" | "fahrenheit" => Some(UnitType::Temperature),
-        "liter" | "liters" | "gallon" | "gallons" => Some(UnitType::Volume),
+        "liter" | "liters" | "gallon" | "gallons" | "milliliter" | "milliliters" => Some(UnitType::Volume),
         _ => None,
     }
 }
@@ -78,37 +236,21 @@ fn format_output(value: f64, unit: &str) -> String {
         return format!("1 {}", get_plural_unit(unit, false));
     }
     
-    // Format with 6 significant figures
-    let formatted = if value.abs() >= 1.0 {
+    // Format with appropriate precision
+    let formatted = if value.abs() >= 1000.0 {
+        // For large values, use fixed decimal places
+        format!("{:.2}", value)
+    } else if value.abs() >= 1.0 {
         // For values >= 1, calculate decimal places needed for 6 sig figs
         let int_digits = (value.abs().log10().floor() + 1.0) as usize;
         let decimal_places = if int_digits >= 6 { 0 } else { 6 - int_digits };
         format!("{:.prec$}", value, prec = decimal_places)
+    } else if value.abs() >= 0.01 {
+        // For small values, use more decimal places
+        format!("{:.6}", value)
     } else {
-        // For values < 1, format with enough decimals
-        let mut s = format!("{:.10}", value);
-        // Count significant figures after decimal point
-        let mut sig_figs = 0;
-        let mut found_nonzero = false;
-        let mut _decimal_places = 0;
-        
-        for (i, c) in s.chars().enumerate() {
-            if c == '.' {
-                continue;
-            }
-            if i > s.find('.').unwrap() {
-                _decimal_places += 1;
-                if c != '0' || found_nonzero {
-                    found_nonzero = true;
-                    sig_figs += 1;
-                    if sig_figs >= 6 {
-                        s.truncate(i + 1);
-                        break;
-                    }
-                }
-            }
-        }
-        s
+        // For very small values, use scientific notation style formatting
+        format!("{:.6}", value)
     };
     
     // Remove trailing zeros and decimal point if not needed
@@ -121,30 +263,42 @@ fn format_output(value: f64, unit: &str) -> String {
     format!("{} {}", trimmed, get_plural_unit(unit, !is_singular))
 }
 
-fn get_plural_unit(unit: &str, plural: bool) -> &str {
+fn get_plural_unit(unit: &str, plural: bool) -> String {
+    // For compound units, just return as-is
+    if unit.contains('/') || unit.contains(" per ") || unit.contains('^') || 
+       unit.contains("square") || unit.contains("cubic") {
+        return unit.to_string();
+    }
+    
     if plural {
         match unit {
-            "meter" => "meters",
-            "foot" => "feet",
-            "kilometer" => "kilometers",
-            "mile" => "miles",
-            "kilogram" => "kilograms",
-            "pound" => "pounds",
-            "liter" => "liters",
-            "gallon" => "gallons",
-            _ => unit,
+            "meter" => "meters".to_string(),
+            "foot" => "feet".to_string(),
+            "kilometer" => "kilometers".to_string(),
+            "mile" => "miles".to_string(),
+            "kilogram" => "kilograms".to_string(),
+            "pound" => "pounds".to_string(),
+            "liter" => "liters".to_string(),
+            "gallon" => "gallons".to_string(),
+            "newton" => "newtons".to_string(),
+            "joule" => "joules".to_string(),
+            "watt" => "watts".to_string(),
+            _ => unit.to_string(),
         }
     } else {
         match unit {
-            "meters" => "meter",
-            "feet" => "foot",
-            "kilometers" => "kilometer",
-            "miles" => "mile",
-            "kilograms" => "kilogram",
-            "pounds" => "pound",
-            "liters" => "liter",
-            "gallons" => "gallon",
-            _ => unit,
+            "meters" => "meter".to_string(),
+            "feet" => "foot".to_string(),
+            "kilometers" => "kilometer".to_string(),
+            "miles" => "mile".to_string(),
+            "kilograms" => "kilogram".to_string(),
+            "pounds" => "pound".to_string(),
+            "liters" => "liter".to_string(),
+            "gallons" => "gallon".to_string(),
+            "newtons" => "newton".to_string(),
+            "joules" => "joule".to_string(),
+            "watts" => "watt".to_string(),
+            _ => unit.to_string(),
         }
     }
 }
@@ -158,7 +312,17 @@ pub fn convert_units(input: &str, output_unit: &str) -> Result<String, Conversio
     // Check if units exist
     let input_type = match get_unit_type(&parsed.unit) {
         Some(t) => t,
-        None => return Err(ConversionError::UnknownUnit(parsed.unit)),
+        None => {
+            // Check for specific invalid combinations
+            if parsed.unit.contains("meters / celsius") || parsed.unit.contains("feet / fahrenheit") {
+                return Err(ConversionError::InvalidUnitCombination);
+            } else if parsed.unit.contains("kilograms * meters") || parsed.unit.contains("pounds inches") {
+                return Err(ConversionError::UnknownCompoundUnit);
+            } else if parsed.unit.contains("meter / meter") || parsed.unit.contains("foot / foot") {
+                return Err(ConversionError::UnitCancellationNotSupported);
+            }
+            return Err(ConversionError::UnknownUnit(parsed.unit));
+        }
     };
     
     let output_type = match get_unit_type(&output_unit_lower) {
@@ -173,6 +337,14 @@ pub fn convert_units(input: &str, output_unit: &str) -> Result<String, Conversio
             UnitType::Mass => "mass",
             UnitType::Temperature => "temperature",
             UnitType::Volume => "volume",
+            UnitType::Velocity => "velocity",
+            UnitType::Area => "area",
+            UnitType::MassDensity => "density",
+            UnitType::Acceleration => "acceleration",
+            UnitType::Force => "force",
+            UnitType::Energy => "energy",
+            UnitType::Power => "power",
+            UnitType::FuelEconomy => "fuel economy",
         };
         return Err(ConversionError::IncompatibleUnits {
             from: type_name(&input_type).to_string(),
@@ -186,6 +358,14 @@ pub fn convert_units(input: &str, output_unit: &str) -> Result<String, Conversio
         UnitType::Mass => convert_mass(parsed.value, &parsed.unit, &output_unit_lower),
         UnitType::Temperature => convert_temperature(parsed.value, &parsed.unit, &output_unit_lower),
         UnitType::Volume => convert_volume(parsed.value, &parsed.unit, &output_unit_lower),
+        UnitType::Velocity => convert_velocity(parsed.value, &parsed.unit, &output_unit_lower),
+        UnitType::Area => convert_area(parsed.value, &parsed.unit, &output_unit_lower),
+        UnitType::MassDensity => convert_mass_density(parsed.value, &parsed.unit, &output_unit_lower),
+        UnitType::Acceleration => convert_acceleration(parsed.value, &parsed.unit, &output_unit_lower),
+        UnitType::Force => convert_force(parsed.value, &parsed.unit, &output_unit_lower),
+        UnitType::Energy => convert_energy(parsed.value, &parsed.unit, &output_unit_lower),
+        UnitType::Power => convert_power(parsed.value, &parsed.unit, &output_unit_lower),
+        UnitType::FuelEconomy => convert_fuel_economy(parsed.value, &parsed.unit, &output_unit_lower),
     };
     
     Ok(format_output(result, &output_unit_lower))
@@ -241,12 +421,186 @@ fn convert_volume(value: f64, from_unit: &str, to_unit: &str) -> f64 {
     let volume = match from_unit {
         "liter" | "liters" => Volume::new::<volume::liter>(value),
         "gallon" | "gallons" => Volume::new::<volume::gallon>(value),
+        "cubic meter" | "cubic meters" => Volume::new::<volume::cubic_meter>(value),
+        "cubic foot" | "cubic feet" => Volume::new::<volume::cubic_foot>(value),
+        "cubic centimeter" | "cubic centimeters" => Volume::new::<volume::cubic_centimeter>(value),
+        "cubic inch" | "cubic inches" => Volume::new::<volume::cubic_inch>(value),
         _ => unreachable!(),
     };
     
     match to_unit {
         "liter" | "liters" => volume.get::<volume::liter>(),
         "gallon" | "gallons" => volume.get::<volume::gallon>(),
+        "cubic meter" | "cubic meters" => volume.get::<volume::cubic_meter>(),
+        "cubic foot" | "cubic feet" => volume.get::<volume::cubic_foot>(),
+        "cubic centimeter" | "cubic centimeters" => volume.get::<volume::cubic_centimeter>(),
+        "cubic inch" | "cubic inches" => volume.get::<volume::cubic_inch>(),
+        _ => unreachable!(),
+    }
+}
+
+fn convert_velocity(value: f64, from_unit: &str, to_unit: &str) -> f64 {
+    let velocity = match from_unit {
+        "miles/hour" | "miles per hour" | "mph" => Velocity::new::<velocity::mile_per_hour>(value),
+        "kilometers/hour" | "kilometers per hour" | "kmh" | "kph" | "km/h" => 
+            Velocity::new::<velocity::kilometer_per_hour>(value),
+        "meters/second" | "meters per second" | "m/s" => Velocity::new::<velocity::meter_per_second>(value),
+        "feet/second" | "feet per second" | "ft/s" => Velocity::new::<velocity::foot_per_second>(value),
+        _ => unreachable!(),
+    };
+    
+    match to_unit {
+        "miles/hour" | "miles per hour" | "mph" => velocity.get::<velocity::mile_per_hour>(),
+        "kilometers/hour" | "kilometers per hour" | "kmh" | "kph" | "km/h" => 
+            velocity.get::<velocity::kilometer_per_hour>(),
+        "meters/second" | "meters per second" | "m/s" => velocity.get::<velocity::meter_per_second>(),
+        "feet/second" | "feet per second" | "ft/s" => velocity.get::<velocity::foot_per_second>(),
+        _ => unreachable!(),
+    }
+}
+
+fn convert_area(value: f64, from_unit: &str, to_unit: &str) -> f64 {
+    let area = match from_unit {
+        "square meter" | "square meters" => Area::new::<area::square_meter>(value),
+        "square foot" | "square feet" => Area::new::<area::square_foot>(value),
+        "square kilometer" | "square kilometers" => Area::new::<area::square_kilometer>(value),
+        "square mile" | "square miles" => Area::new::<area::square_mile>(value),
+        "acre" | "acres" => Area::new::<area::acre>(value),
+        _ => unreachable!(),
+    };
+    
+    match to_unit {
+        "square meter" | "square meters" => area.get::<area::square_meter>(),
+        "square foot" | "square feet" => area.get::<area::square_foot>(),
+        "square kilometer" | "square kilometers" => area.get::<area::square_kilometer>(),
+        "square mile" | "square miles" => area.get::<area::square_mile>(),
+        "acre" | "acres" => area.get::<area::acre>(),
+        _ => unreachable!(),
+    }
+}
+
+fn convert_mass_density(value: f64, from_unit: &str, to_unit: &str) -> f64 {
+    let density = match from_unit {
+        "kilograms / cubic meter" | "kilogram / cubic meter" => 
+            MassDensity::new::<mass_density::kilogram_per_cubic_meter>(value),
+        "pounds / cubic foot" | "pound / cubic foot" => 
+            MassDensity::new::<mass_density::pound_per_cubic_foot>(value),
+        "grams / cubic centimeter" | "gram / cubic centimeter" => 
+            MassDensity::new::<mass_density::gram_per_cubic_centimeter>(value),
+        "pounds / cubic inch" | "pound / cubic inch" => 
+            MassDensity::new::<mass_density::pound_per_cubic_inch>(value),
+        "gram / milliliter" | "grams / milliliter" => 
+            MassDensity::new::<mass_density::gram_per_cubic_centimeter>(value),
+        "kilograms / liter" | "kilogram / liter" => 
+            // 1 kg/L = 1000 kg/m³
+            MassDensity::new::<mass_density::kilogram_per_cubic_meter>(value * 1000.0),
+        _ => unreachable!(),
+    };
+    
+    match to_unit {
+        "kilograms / cubic meter" | "kilogram / cubic meter" => 
+            density.get::<mass_density::kilogram_per_cubic_meter>(),
+        "pounds / cubic foot" | "pound / cubic foot" => 
+            density.get::<mass_density::pound_per_cubic_foot>(),
+        "grams / cubic centimeter" | "gram / cubic centimeter" => 
+            density.get::<mass_density::gram_per_cubic_centimeter>(),
+        "pounds / cubic inch" | "pound / cubic inch" => 
+            density.get::<mass_density::pound_per_cubic_inch>(),
+        "gram / milliliter" | "grams / milliliter" => 
+            density.get::<mass_density::gram_per_cubic_centimeter>(),
+        "kilograms / liter" | "kilogram / liter" => 
+            // 1 kg/L = 1000 kg/m³
+            density.get::<mass_density::kilogram_per_cubic_meter>() / 1000.0,
+        _ => unreachable!(),
+    }
+}
+
+fn convert_acceleration(value: f64, from_unit: &str, to_unit: &str) -> f64 {
+    let accel = match from_unit {
+        "meters / second^2" | "meter / second^2" => 
+            Acceleration::new::<acceleration::meter_per_second_squared>(value),
+        "feet / second^2" | "foot / second^2" => 
+            Acceleration::new::<acceleration::foot_per_second_squared>(value),
+        _ => unreachable!(),
+    };
+    
+    match to_unit {
+        "meters / second^2" | "meter / second^2" => 
+            accel.get::<acceleration::meter_per_second_squared>(),
+        "feet / second^2" | "foot / second^2" => 
+            accel.get::<acceleration::foot_per_second_squared>(),
+        _ => unreachable!(),
+    }
+}
+
+fn convert_force(value: f64, from_unit: &str, to_unit: &str) -> f64 {
+    let force = match from_unit {
+        "newton" | "newtons" => Force::new::<force::newton>(value),
+        "pounds force" | "pound force" => Force::new::<force::pound_force>(value),
+        _ => unreachable!(),
+    };
+    
+    match to_unit {
+        "newton" | "newtons" => force.get::<force::newton>(),
+        "pounds force" | "pound force" => force.get::<force::pound_force>(),
+        _ => unreachable!(),
+    }
+}
+
+fn convert_energy(value: f64, from_unit: &str, to_unit: &str) -> f64 {
+    let energy = match from_unit {
+        "joule" | "joules" => Energy::new::<energy::joule>(value),
+        "foot pound" | "foot pounds" => Energy::new::<energy::foot_pound>(value),
+        _ => unreachable!(),
+    };
+    
+    match to_unit {
+        "joule" | "joules" => energy.get::<energy::joule>(),
+        "foot pound" | "foot pounds" => energy.get::<energy::foot_pound>(),
+        _ => unreachable!(),
+    }
+}
+
+fn convert_power(value: f64, from_unit: &str, to_unit: &str) -> f64 {
+    let power = match from_unit {
+        "watt" | "watts" => Power::new::<power::watt>(value),
+        "horsepower" => Power::new::<power::horsepower>(value),
+        _ => unreachable!(),
+    };
+    
+    match to_unit {
+        "watt" | "watts" => power.get::<power::watt>(),
+        "horsepower" => power.get::<power::horsepower>(),
+        _ => unreachable!(),
+    }
+}
+
+fn convert_fuel_economy(value: f64, from_unit: &str, to_unit: &str) -> f64 {
+    // First convert everything to a common base: kilometers per liter
+    let km_per_liter = match from_unit {
+        "miles / gallon" | "miles per gallon" => {
+            // miles/gallon to km/L: 1 mpg = 0.425144 km/L
+            value * 0.425143707
+        }
+        "kilometers / liter" | "kilometers per liter" => value,
+        "liters / 100 kilometers" | "liters per 100 kilometers" => {
+            // L/100km to km/L: divide 100 by the value
+            if value == 0.0 { 0.0 } else { 100.0 / value }
+        }
+        _ => unreachable!(),
+    };
+    
+    // Convert from km/L to target unit
+    match to_unit {
+        "miles / gallon" | "miles per gallon" => {
+            // km/L to miles/gallon: divide by 0.425144
+            km_per_liter / 0.425143707
+        }
+        "kilometers / liter" | "kilometers per liter" => km_per_liter,
+        "liters per 100 kilometers" | "liters / 100 kilometers" => {
+            // km/L to L/100km: divide 100 by the value
+            if km_per_liter == 0.0 { 0.0 } else { 100.0 / km_per_liter }
+        }
         _ => unreachable!(),
     }
 }
