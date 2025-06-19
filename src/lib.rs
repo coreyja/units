@@ -389,4 +389,72 @@ mod tests {
         assert_eq!(convert_units("1  meter", "feet").unwrap(), "3.28084 feet");
         assert_eq!(convert_units("1 meter", "  feet  ").unwrap(), "3.28084 feet");
     }
+
+    #[test]
+    fn test_velocity_miles_per_hour() {
+        assert_eq!(convert_units("60 miles/hour", "kilometers/hour").unwrap(), "96.5604 kilometers/hour");
+        assert_eq!(convert_units("100 kilometers/hour", "miles/hour").unwrap(), "62.1371 miles/hour");
+        assert_eq!(convert_units("30 meters/second", "miles/hour").unwrap(), "67.1081 miles/hour");
+        assert_eq!(convert_units("88 feet/second", "miles/hour").unwrap(), "60 miles/hour");
+    }
+
+    #[test]
+    fn test_velocity_alternative_formats() {
+        assert_eq!(convert_units("60 miles per hour", "km/h").unwrap(), "96.5604 km/h");
+        assert_eq!(convert_units("60 mph", "kph").unwrap(), "96.5604 kph");
+        assert_eq!(convert_units("100 kmh", "mph").unwrap(), "62.1371 mph");
+        assert_eq!(convert_units("30 m/s", "ft/s").unwrap(), "98.4252 ft/s");
+    }
+
+    #[test]
+    fn test_unit_multiplication_area() {
+        assert_eq!(convert_units("10 meters * 5 meters", "square feet").unwrap(), "538.196 square feet");
+        assert_eq!(convert_units("100 square meters", "square feet").unwrap(), "1076.39 square feet");
+        assert_eq!(convert_units("1 square kilometer", "square miles").unwrap(), "0.386102 square miles");
+        assert_eq!(convert_units("1 acre", "square meters").unwrap(), "4046.86 square meters");
+    }
+
+    #[test]
+    fn test_unit_multiplication_volume() {
+        assert_eq!(convert_units("2 meters * 3 meters * 4 meters", "cubic feet").unwrap(), "847.552 cubic feet");
+        assert_eq!(convert_units("1 cubic meter", "liters").unwrap(), "1000 liters");
+        assert_eq!(convert_units("1 cubic foot", "gallons").unwrap(), "7.48052 gallons");
+        assert_eq!(convert_units("100 cubic centimeters", "cubic inches").unwrap(), "6.10237 cubic inches");
+    }
+
+    #[test]
+    fn test_unit_division_density() {
+        assert_eq!(convert_units("1000 kilograms / cubic meter", "pounds / cubic foot").unwrap(), "62.428 pounds / cubic foot");
+        assert_eq!(convert_units("8.96 grams / cubic centimeter", "pounds / cubic inch").unwrap(), "0.323858 pounds / cubic inch");
+        assert_eq!(convert_units("1 gram / milliliter", "kilograms / liter").unwrap(), "1 kilogram / liter");
+    }
+
+    #[test]
+    fn test_unit_division_fuel_economy() {
+        assert_eq!(convert_units("30 miles / gallon", "kilometers / liter").unwrap(), "12.7543 kilometers / liter");
+        assert_eq!(convert_units("8 liters / 100 kilometers", "miles / gallon").unwrap(), "29.4018 miles / gallon");
+        assert_eq!(convert_units("25 miles per gallon", "liters per 100 kilometers").unwrap(), "9.41215 liters per 100 kilometers");
+    }
+
+    #[test]
+    fn test_complex_unit_expressions() {
+        assert_eq!(convert_units("9.8 meters / second^2", "feet / second^2").unwrap(), "32.1522 feet / second^2");
+        assert_eq!(convert_units("1 newton", "pounds force").unwrap(), "0.224809 pounds force");
+        assert_eq!(convert_units("1 joule", "foot pounds").unwrap(), "0.737562 foot pounds");
+        assert_eq!(convert_units("100 watts", "horsepower").unwrap(), "0.134102 horsepower");
+    }
+
+    #[test]
+    fn test_invalid_compound_units() {
+        assert_eq!(convert_units("10 meters / celsius", "feet / fahrenheit").unwrap_err().to_string(), "Error: Invalid unit combination");
+        assert_eq!(convert_units("5 kilograms * meters", "pounds inches").unwrap_err().to_string(), "Error: Unknown compound unit");
+        assert_eq!(convert_units("1 meter / meter", "feet").unwrap_err().to_string(), "Error: Unit cancellation not supported");
+    }
+
+    #[test]
+    fn test_parentheses_in_expressions() {
+        assert_eq!(convert_units("60 miles / (1 hour)", "meters / second").unwrap(), "26.8224 meters / second");
+        assert_eq!(convert_units("(10 kilograms) / (2 meters)^3", "pounds / cubic foot").unwrap(), "0.0780194 pounds / cubic foot");
+        assert_eq!(convert_units("5 * (meters / second)", "feet / second").unwrap(), "16.4042 feet / second");
+    }
 }
