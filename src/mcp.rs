@@ -1,15 +1,26 @@
-use rmcp::{Error as McpError, model::*, tool};
+use rmcp::{Error as McpError, model::*, tool, ServerHandler};
 
 #[derive(Clone)]
 pub struct UnitConversion {}
 
-#[tool(tool_box)]
 impl UnitConversion {
-    #[allow(dead_code)]
     pub fn new() -> Self {
         Self {}
     }
+}
 
+impl ServerHandler for UnitConversion {
+    fn get_info(&self) -> ServerInfo {
+        ServerInfo {
+            instructions: Some("A unit conversion server that can convert between various units of measurement".into()),
+            capabilities: ServerCapabilities::builder().enable_tools().build(),
+            ..Default::default()
+        }
+    }
+}
+
+#[tool(tool_box)]
+impl UnitConversion {
     #[tool(
         description = "Convert from one unit to another. Provide the original value and the desired output unit"
     )]

@@ -9,7 +9,10 @@
       "Bash(cargo check:*)",
       "Bash(cargo clippy:*)",
       "Bash(ls:*)",
-      "Bash(cargo build:*)"
+      "Bash(cargo build:*)",
+      "WebFetch(domain:docs.rs)",
+      "Bash(rg:*)",
+      "WebFetch(domain:github.com)"
     ],
     "deny": []
   }

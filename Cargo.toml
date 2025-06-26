@@ -4,14 +4,39 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-rmcp = { git = "https://github.com/modelcontextprotocol/rust-sdk", branch = "main" }
-serde = { version = "1.0.219", features = ["derive"] }
-serde_json = "1.0.140"
-tokio = { version = "1.45.1", features = ["full"] }
+async-trait = "0.1"
+axum = "0.8"
+chrono = { version = "0.4", features = ["serde"] }
+cja = { git = "https://github.com/coreyja/cja", branch = "cja/main/features", version = "0.0.0", default-features = false, features = [
+] }
+color-eyre = "0.6"
+futures = "0.3"
+maud = { version = "0.27", features = ["axum"] }
+rmcp = { git = "https://github.com/modelcontextprotocol/rust-sdk", branch = "main", features = [
+  "server",
+  "transport-sse-server",
+] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sqlx = { version = "0.8", features = [
+  "runtime-tokio-rustls",
+  "postgres",
+  "uuid",
+  "json",
+  "chrono",
+] }
+tokio = { version = "1", features = ["full"] }
+tokio-util = "0.7"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 uom = { version = "0.37.0", features = ["serde"] }
+uuid = { version = "1.5", features = ["v4", "serde"] }
 
 [lib]
 
 [[bin]]
 name = "server"
-path = "src/main.rs"
+path = "src/bin/server.rs"
+
+[build-dependencies]
+vergen = { version = "8", features = ["build", "git", "gitcl"] }
