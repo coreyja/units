@@ -24,7 +24,7 @@ impl Default for UnitConversion {
     }
 }
 
-#[tool_router]
+#[tool_router(vis = "pub")]
 impl UnitConversion {
     #[tool(
         description = "Convert from one unit to another. Provide the original value and the desired output unit"

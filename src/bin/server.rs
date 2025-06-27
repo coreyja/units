@@ -74,26 +74,24 @@ pub async fn setup_db_pool() -> cja::Result<PgPool> {
         .connect(&database_url)
         .await?;
 
-    sqlx::query!("SELECT pg_advisory_lock($1)", MIGRATION_LOCK_ID)
+    sqlx::query("SELECT pg_advisory_lock($1)")
+        .bind(MIGRATION_LOCK_ID)
         .execute(&pool)
         .await?;
 
     sqlx::migrate!().run(&pool).await?;
 
-    let unlock_result = sqlx::query!("SELECT pg_advisory_unlock($1)", MIGRATION_LOCK_ID)
+    use sqlx::Row;
+    let unlock_result = sqlx::query("SELECT pg_advisory_unlock($1)")
+        .bind(MIGRATION_LOCK_ID)
         .fetch_one(&pool)
         .await?
-        .pg_advisory_unlock;
+        .get::<bool, _>(0);
 
-    match unlock_result {
-        Some(b) => {
-            if b {
-                tracing::info!("Migration lock unlocked");
-            } else {
-                tracing::info!("Failed to unlock migration lock");
-            }
-        }
-        None => return Err(eyre!("Failed to unlock migration lock")),
+    if unlock_result {
+        tracing::info!("Migration lock unlocked");
+    } else {
+        tracing::info!("Failed to unlock migration lock");
     }
 
     Ok(pool)
