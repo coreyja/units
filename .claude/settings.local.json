@@ -12,7 +12,10 @@
       "Bash(cargo build:*)",
       "WebFetch(domain:docs.rs)",
       "Bash(rg:*)",
-      "WebFetch(domain:github.com)"
+      "WebFetch(domain:github.com)",
+      "mcp__Linear__get_issue",
+      "mcp__Linear__list_teams",
+      "WebFetch(domain:raw.githubusercontent.com)"
     ],
     "deny": []
   }

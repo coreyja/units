@@ -19,9 +19,9 @@ impl std::fmt::Display for ConversionError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ConversionError::InvalidInputFormat => write!(f, "Error: Invalid input format"),
-            ConversionError::UnknownUnit(unit) => write!(f, "Error: Unknown unit '{}'", unit),
+            ConversionError::UnknownUnit(unit) => write!(f, "Error: Unknown unit '{unit}'"),
             ConversionError::IncompatibleUnits { from, to } => {
-                write!(f, "Error: Cannot convert from {} to {}", from, to)
+                write!(f, "Error: Cannot convert from {from} to {to}")
             }
             ConversionError::InvalidUnitCombination => {
                 write!(f, "Error: Invalid unit combination")
@@ -105,8 +105,7 @@ fn parse_multiplication_expression(input: &str) -> Result<ParsedInput, Conversio
         let space_idx = part.find(' ').ok_or(ConversionError::InvalidInputFormat)?;
         let (val_str, unit_str) = part.split_at(space_idx);
 
-        let val =
-            f64::from_str(val_str.trim()).map_err(|_| ConversionError::InvalidInputFormat)?;
+        let val = f64::from_str(val_str.trim()).map_err(|_| ConversionError::InvalidInputFormat)?;
         total_value *= val;
 
         unit_parts.push(unit_str.trim().to_lowercase());
@@ -126,14 +125,7 @@ fn determine_compound_unit(units: &[String]) -> String {
     let all_length = units.iter().all(|u| {
         matches!(
             u.as_str(),
-            "meter"
-                | "meters"
-                | "foot"
-                | "feet"
-                | "kilometer"
-                | "kilometers"
-                | "mile"
-                | "miles"
+            "meter" | "meters" | "foot" | "feet" | "kilometer" | "kilometers" | "mile" | "miles"
         )
     });
 
@@ -246,11 +238,10 @@ fn get_unit_type(unit: &str) -> Option<UnitType> {
 
     // Simple units
     match unit {
-        "meter" | "meters" | "foot" | "feet" | "kilometer" | "kilometers" | "mile"
-        | "miles" => Some(UnitType::Length),
-        "kilogram" | "kilograms" | "pound" | "pounds" | "gram" | "grams" => {
-            Some(UnitType::Mass)
+        "meter" | "meters" | "foot" | "feet" | "kilometer" | "kilometers" | "mile" | "miles" => {
+            Some(UnitType::Length)
         }
+        "kilogram" | "kilograms" | "pound" | "pounds" | "gram" | "grams" => Some(UnitType::Mass),
         "celsius" | "fahrenheit" => Some(UnitType::Temperature),
         "liter" | "liters" | "gallon" | "gallons" | "milliliter" | "milliliters" => {
             Some(UnitType::Volume)
@@ -273,18 +264,18 @@ fn format_output(value: f64, unit: &str) -> String {
     // Format with appropriate precision
     let formatted = if value.abs() >= 1000.0 {
         // For large values, use fixed decimal places
-        format!("{:.2}", value)
+        format!("{value:.2}")
     } else if value.abs() >= 1.0 {
         // For values >= 1, calculate decimal places needed for 6 sig figs
         let int_digits = (value.abs().log10().floor() + 1.0) as usize;
-        let decimal_places = if int_digits >= 6 { 0 } else { 6 - int_digits };
-        format!("{:.prec$}", value, prec = decimal_places)
+        let decimal_places = 6_usize.saturating_sub(int_digits);
+        format!("{value:.decimal_places$}")
     } else if value.abs() >= 0.01 {
         // For small values, use more decimal places
-        format!("{:.6}", value)
+        format!("{value:.6}")
     } else {
         // For very small values, use scientific notation style formatting
-        format!("{:.6}", value)
+        format!("{value:.6}")
     };
 
     // Remove trailing zeros and decimal point if not needed
@@ -352,17 +343,14 @@ pub fn convert_units(input: &str, output_unit: &str) -> Result<String, Conversio
         Some(t) => t,
         None => {
             // Check for specific invalid combinations
-            if parsed.unit.contains("meters / celsius")
-                || parsed.unit.contains("feet / fahrenheit")
+            if parsed.unit.contains("meters / celsius") || parsed.unit.contains("feet / fahrenheit")
             {
                 return Err(ConversionError::InvalidUnitCombination);
             } else if parsed.unit.contains("kilograms * meters")
                 || parsed.unit.contains("pounds inches")
             {
                 return Err(ConversionError::UnknownCompoundUnit);
-            } else if parsed.unit.contains("meter / meter")
-                || parsed.unit.contains("foot / foot")
-            {
+            } else if parsed.unit.contains("meter / meter") || parsed.unit.contains("foot / foot") {
                 return Err(ConversionError::UnitCancellationNotSupported);
             }
             return Err(ConversionError::UnknownUnit(parsed.unit));
@@ -475,9 +463,7 @@ fn convert_volume(value: f64, from_unit: &str, to_unit: &str) -> f64 {
         "gallon" | "gallons" => Volume::new::<volume::gallon>(value),
         "cubic meter" | "cubic meters" => Volume::new::<volume::cubic_meter>(value),
         "cubic foot" | "cubic feet" => Volume::new::<volume::cubic_foot>(value),
-        "cubic centimeter" | "cubic centimeters" => {
-            Volume::new::<volume::cubic_centimeter>(value)
-        }
+        "cubic centimeter" | "cubic centimeters" => Volume::new::<volume::cubic_centimeter>(value),
         "cubic inch" | "cubic inches" => Volume::new::<volume::cubic_inch>(value),
         _ => unreachable!(),
     };
@@ -495,9 +481,7 @@ fn convert_volume(value: f64, from_unit: &str, to_unit: &str) -> f64 {
 
 fn convert_velocity(value: f64, from_unit: &str, to_unit: &str) -> f64 {
     let velocity = match from_unit {
-        "miles/hour" | "miles per hour" | "mph" => {
-            Velocity::new::<velocity::mile_per_hour>(value)
-        }
+        "miles/hour" | "miles per hour" | "mph" => Velocity::new::<velocity::mile_per_hour>(value),
         "kilometers/hour" | "kilometers per hour" | "kmh" | "kph" | "km/h" => {
             Velocity::new::<velocity::kilometer_per_hour>(value)
         }
@@ -518,9 +502,7 @@ fn convert_velocity(value: f64, from_unit: &str, to_unit: &str) -> f64 {
         "meters/second" | "meters per second" | "m/s" => {
             velocity.get::<velocity::meter_per_second>()
         }
-        "feet/second" | "feet per second" | "ft/s" => {
-            velocity.get::<velocity::foot_per_second>()
-        }
+        "feet/second" | "feet per second" | "ft/s" => velocity.get::<velocity::foot_per_second>(),
         _ => unreachable!(),
     }
 }
