@@ -166,6 +166,24 @@ async fn root() -> impl IntoResponse {
                 meta charset="UTF-8";
                 meta name="viewport" content="width=device-width, initial-scale=1.0";
                 title { "Units MCP Server - Example Implementation" }
+                
+                // Open Graph meta tags
+                meta property="og:title" content="Units MCP Server - Example Implementation";
+                meta property="og:description" content="A simple example MCP server that converts between common units. Works with Claude and other MCP-compatible clients.";
+                meta property="og:type" content="website";
+                meta property="og:url" content="https://units.coreyja.com";
+                meta property="og:site_name" content="Units MCP Server";
+                meta property="article:author" content="@coreyja.com";
+                
+                // Twitter Card meta tags
+                meta name="twitter:card" content="summary";
+                meta name="twitter:title" content="Units MCP Server - Example Implementation";
+                meta name="twitter:description" content="A simple example MCP server that converts between common units. Works with Claude and other MCP-compatible clients.";
+                
+                // Additional meta tags
+                meta name="description" content="A simple example MCP server that converts between common units. Works with Claude and other MCP-compatible clients.";
+                meta name="author" content="coreyja";
+                
                 script src="https://cdn.tailwindcss.com" {}
                 style { "
                     @keyframes float {
