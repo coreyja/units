@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  format:
+    uses: ./.github/workflows/format-rust.yml
+
+  check-stable:
+    uses: ./.github/workflows/check-rust.yml
+    with:
+      rust-version: stable
+
+  check-nightly:
+    uses: ./.github/workflows/check-rust.yml
+    with:
+      rust-version: nightly
+
+  cargo-deny:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          log-level: warn
+          command: check bans
+          arguments: --all-features
+
+  deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [format, check-stable, check-nightly, cargo-deny]
+    uses: ./.github/workflows/deploy.yml
+    secrets:
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}

@@ -1,0 +1,22 @@
+name: Deploy to Fly
+
+on:
+  workflow_call:
+    secrets:
+      FLY_API_TOKEN:
+        description: 'Fly.io API token'
+        required: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Fly CLI
+        uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Deploy to Fly
+        run: flyctl deploy --remote-only
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}

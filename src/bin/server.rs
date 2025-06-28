@@ -1,17 +1,11 @@
 use axum::response::IntoResponse;
 use cja::{
-    color_eyre::{
-        self,
-        eyre::{Context as _, eyre},
-    },
+    color_eyre::{self, eyre::Context as _},
     server::{cookies::CookieKey, run_server},
     setup::{setup_sentry, setup_tracing},
 };
 use maud::html;
-use rmcp::{
-    service::RequestContext,
-    transport::sse_server::{SseServer, SseServerConfig},
-};
+use rmcp::transport::sse_server::{SseServer, SseServerConfig};
 use sqlx::{PgPool, postgres::PgPoolOptions};
 use std::net::SocketAddr;
 use tokio_util::sync::CancellationToken;
