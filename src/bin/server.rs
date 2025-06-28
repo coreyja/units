@@ -166,7 +166,7 @@ async fn root() -> impl IntoResponse {
                 meta charset="UTF-8";
                 meta name="viewport" content="width=device-width, initial-scale=1.0";
                 title { "Units MCP Server - Example Implementation" }
-                
+
                 // Open Graph meta tags
                 meta property="og:title" content="Units MCP Server - Example Implementation";
                 meta property="og:description" content="A simple example MCP server that converts between common units. Works with Claude and other MCP-compatible clients.";
@@ -174,16 +174,16 @@ async fn root() -> impl IntoResponse {
                 meta property="og:url" content="https://units.coreyja.com";
                 meta property="og:site_name" content="Units MCP Server";
                 meta property="article:author" content="@coreyja.com";
-                
+
                 // Twitter Card meta tags
                 meta name="twitter:card" content="summary";
                 meta name="twitter:title" content="Units MCP Server - Example Implementation";
                 meta name="twitter:description" content="A simple example MCP server that converts between common units. Works with Claude and other MCP-compatible clients.";
-                
+
                 // Additional meta tags
                 meta name="description" content="A simple example MCP server that converts between common units. Works with Claude and other MCP-compatible clients.";
                 meta name="author" content="coreyja";
-                
+
                 script src="https://cdn.tailwindcss.com" {}
                 style { "
                     @keyframes float {
@@ -198,17 +198,17 @@ async fn root() -> impl IntoResponse {
             body class="bg-gradient-to-br from-purple-50 to-pink-50 text-gray-900 min-h-screen" {
                 div class="container mx-auto px-4 py-12 max-w-4xl" {
                     header class="text-center mb-12" {
-                        h1 class="text-5xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent mb-4" { 
-                            "Units MCP Server" 
+                        h1 class="text-5xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent mb-4" {
+                            "Units MCP Server"
                         }
-                        p class="text-xl text-gray-700 font-medium" { 
-                            "A simple example MCP server that works with Claude and other MCP-compatible clients" 
+                        p class="text-xl text-gray-700 font-medium" {
+                            "A simple example MCP server that works with Claude and other MCP-compatible clients"
                         }
                     }
 
                     section class="bg-white/80 backdrop-blur rounded-2xl shadow-xl p-8 mb-8 border border-purple-100" {
-                        h2 class="text-3xl font-bold mb-4 text-purple-700" { 
-                            "Getting Started" 
+                        h2 class="text-3xl font-bold mb-4 text-purple-700" {
+                            "Getting Started"
                         }
                         p class="text-gray-700 mb-6 text-lg leading-relaxed" {
                             "This example MCP server demonstrates how to build a simple tool that works with Claude and any other MCP-supporting client. "
@@ -216,42 +216,42 @@ async fn root() -> impl IntoResponse {
                         }
 
                         div class="bg-gradient-to-r from-purple-100 to-pink-100 rounded-xl p-6 mb-6 border-2 border-purple-200" {
-                            h3 class="font-bold mb-2 text-purple-800 text-lg" { 
-                                "MCP Server URL" 
+                            h3 class="font-bold mb-2 text-purple-800 text-lg" {
+                                "MCP Server URL"
                             }
-                            code class="bg-white px-4 py-2 rounded-lg text-sm font-mono text-purple-600 inline-block shadow-sm" { 
-                                "units.coreyja.com/mcp/sse" 
+                            code class="bg-white px-4 py-2 rounded-lg text-sm font-mono text-purple-600 inline-block shadow-sm" {
+                                "https://units.coreyja.com/mcp/sse"
                             }
                         }
 
-                        h3 class="font-bold mb-4 text-purple-700 text-lg" { 
-                            "Quick Setup" 
+                        h3 class="font-bold mb-4 text-purple-700 text-lg" {
+                            "Quick Setup"
                         }
                         ol class="list-decimal list-inside space-y-3 text-gray-700 ml-8" {
-                            li class="leading-relaxed" { 
-                                "Add the URL to your MCP client configuration (Claude, etc.)" 
+                            li class="leading-relaxed" {
+                                "Add the URL to your MCP client configuration (Claude, etc.)"
                             }
-                            li class="leading-relaxed" { 
-                                "Connect via SSE (Server-Sent Events) transport" 
+                            li class="leading-relaxed" {
+                                "Connect via SSE (Server-Sent Events) transport"
                             }
-                            li class="leading-relaxed" { 
-                                "Use the convert_units tool in your conversations" 
+                            li class="leading-relaxed" {
+                                "Use the convert_units tool in your conversations"
                             }
                         }
                     }
 
                     section class="bg-white/80 backdrop-blur rounded-2xl shadow-xl p-8 mb-8 border border-purple-100" {
-                        h2 class="text-3xl font-bold mb-6 text-purple-700" { 
-                            "Available Tool" 
+                        h2 class="text-3xl font-bold mb-6 text-purple-700" {
+                            "Available Tool"
                         }
 
                         div class="bg-gradient-to-r from-blue-500 to-purple-600 p-1 rounded-xl" {
                             div class="bg-white rounded-lg p-6" {
-                                h3 class="font-bold text-2xl mb-3 text-purple-800" { 
-                                    "convert_units" 
+                                h3 class="font-bold text-2xl mb-3 text-purple-800" {
+                                    "convert_units"
                                 }
-                                p class="text-gray-700 mb-4 text-lg" { 
-                                    "A simple tool that converts between units. Provide an input value and desired output unit." 
+                                p class="text-gray-700 mb-4 text-lg" {
+                                    "A simple tool that converts between units. Provide an input value and desired output unit."
                                 }
 
                                 div class="space-y-4 bg-purple-50 rounded-lg p-4" {
@@ -280,8 +280,8 @@ async fn root() -> impl IntoResponse {
                     }
 
                     section class="bg-white/80 backdrop-blur rounded-2xl shadow-xl p-8 border border-purple-100" {
-                        h2 class="text-3xl font-bold mb-6 text-purple-700" { 
-                            "Supported Unit Types" 
+                        h2 class="text-3xl font-bold mb-6 text-purple-700" {
+                            "Supported Unit Types"
                         }
                         p class="text-gray-600 mb-6" {
                             "This example server supports a handful of common unit conversions. "
