@@ -2,14 +2,22 @@ use axum::response::IntoResponse;
 use cja::{
     color_eyre::{self, eyre::Context as _},
     server::{cookies::CookieKey, run_server},
-    setup::{setup_sentry, setup_tracing},
+    setup::setup_sentry,
 };
+use eyes_subscriber::EyesShutdownHandle;
 use maud::html;
+use opentelemetry_otlp::WithExportConfig;
 use rmcp::transport::sse_server::{SseServer, SseServerConfig};
 use sqlx::{PgPool, postgres::PgPoolOptions};
-use std::net::SocketAddr;
+use std::{collections::HashMap, net::SocketAddr, time::Duration};
 use tokio_util::sync::CancellationToken;
 use tracing::info;
+use tracing_opentelemetry::OpenTelemetryLayer;
+use tracing_subscriber::{
+    EnvFilter, Layer, Registry, layer::SubscriberExt, util::SubscriberInitExt,
+};
+use tracing_tree::HierarchicalLayer;
+use uuid::Uuid;
 
 #[derive(Clone)]
 struct AppState {
@@ -91,9 +99,89 @@ pub async fn setup_db_pool() -> cja::Result<PgPool> {
     Ok(pool)
 }
 
+pub fn setup_tracing(crate_name: &str) -> color_eyre::Result<EyesShutdownHandle> {
+    let rust_log = std::env::var("RUST_LOG")
+        .unwrap_or_else(|_| format!("info,{crate_name}=trace,tower_http=debug,serenity=error"));
+
+    let env_filter = EnvFilter::builder().parse(&rust_log).wrap_err_with(|| {
+        color_eyre::eyre::eyre!("Couldn't create env filter from {}", rust_log)
+    })?;
+
+    let org_id = std::env::var("EYES_ORG_ID").unwrap();
+    let app_id = std::env::var("EYES_APP_ID").unwrap();
+
+    let org_id: Uuid = org_id.parse()?;
+    let app_id: Uuid = app_id.parse()?;
+
+    let eyes_url = std::env::var("EYES_URL").unwrap();
+
+    // Build the Eyes layer with WebSocket transport
+    let (eyes_layer, shutdown_handle) =
+        eyes_subscriber::EyesSubscriberBuilder::new(&eyes_url, org_id, app_id)?
+            .build_with_transport(eyes_subscriber::TransportType::Http);
+
+    let opentelemetry_layer = if let Ok(honeycomb_key) = std::env::var("HONEYCOMB_API_KEY") {
+        let mut map = HashMap::<String, String>::new();
+        map.insert("x-honeycomb-team".to_string(), honeycomb_key);
+        map.insert("x-honeycomb-dataset".to_string(), "coreyja.com".to_string());
+
+        let tracer = opentelemetry_otlp::new_pipeline()
+            .tracing()
+            .with_exporter(
+                opentelemetry_otlp::new_exporter()
+                    .http()
+                    .with_endpoint("https://api.honeycomb.io/v1/traces")
+                    .with_timeout(Duration::from_secs(3))
+                    .with_headers(map),
+            )
+            .install_batch(opentelemetry_sdk::runtime::Tokio)?;
+
+        let opentelemetry_layer = OpenTelemetryLayer::new(tracer);
+        println!("Honeycomb layer configured");
+
+        Some(opentelemetry_layer)
+    } else {
+        println!("Skipping Honeycomb layer");
+
+        None
+    };
+
+    let stdout_layer = if std::env::var("JSON_LOGS").is_ok() {
+        println!("Logging to STDOUT as JSON");
+
+        tracing_subscriber::fmt::layer()
+            .json()
+            .with_current_span(true)
+            .boxed()
+    } else {
+        let hierarchical = HierarchicalLayer::default()
+            .with_writer(std::io::stdout)
+            .with_indent_lines(true)
+            .with_indent_amount(2)
+            .with_thread_names(true)
+            .with_thread_ids(true)
+            .with_verbose_exit(true)
+            .with_verbose_entry(true)
+            .with_targets(true);
+
+        println!("Logging to STDOUT as hierarchical");
+
+        hierarchical.boxed()
+    };
+
+    Registry::default()
+        .with(stdout_layer)
+        .with(opentelemetry_layer)
+        .with(eyes_layer)
+        .with(env_filter)
+        .try_init()?;
+
+    Ok(shutdown_handle)
+}
+
 async fn run_application() -> cja::Result<()> {
     // Initialize tracing
-    setup_tracing("cja-site")?;
+    let eyes_shutdown_handle = setup_tracing("units")?;
 
     let app_state = AppState::from_env().await?;
 
@@ -150,6 +238,7 @@ async fn run_application() -> cja::Result<()> {
 
     tokio::signal::ctrl_c().await?;
     ct.cancel();
+    eyes_shutdown_handle.shutdown().await.unwrap();
     Ok(())
 }
 

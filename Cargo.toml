@@ -13,6 +13,19 @@ cja = { git = "https://github.com/coreyja/cja", branch = "cja/main/features", ve
 color-eyre = "0.6"
 futures = "0.3"
 maud = { version = "0.27", features = ["axum"] }
+tracing-opentelemetry = "0.24.0"
+tracing-subscriber = { version = "0.3.16", features = ["env-filter", "json"] }
+tracing-tree = "0.2.2"
+opentelemetry = { version = "0.23.0", features = [], default-features = false }
+opentelemetry_sdk = { version = "0.23.0", features = [
+  "rt-tokio",
+], default-features = false }
+opentelemetry-otlp = { version = "0.16.0", features = [
+  "http-proto",
+  "reqwest-rustls",
+  "reqwest-client",
+], default-features = false }
+tracing = "0.1.37"
 rmcp = { git = "https://github.com/modelcontextprotocol/rust-sdk", branch = "main", features = [
   "server",
   "transport-sse-server",
@@ -28,10 +41,9 @@ sqlx = { version = "0.8", features = [
 ] }
 tokio = { version = "1", features = ["full"] }
 tokio-util = "0.7"
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 uom = { version = "0.37.0", features = ["serde"] }
 uuid = { version = "1.5", features = ["v4", "serde"] }
+eyes-subscriber = { version = "0.1.1" }
 
 [lib]
 
