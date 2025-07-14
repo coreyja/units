@@ -4,6 +4,7 @@ use rmcp::{
     model::*,
     schemars, tool, tool_handler, tool_router,
 };
+use tracing::{info, error, instrument};
 
 #[derive(Clone)]
 pub struct UnitConversion {
@@ -29,6 +30,7 @@ impl UnitConversion {
     #[tool(
         description = "Convert from one unit to another. Provide the original value and the desired output unit"
     )]
+    #[instrument(skip(self), fields(input = %input_value, output_unit = %output_unit))]
     async fn convert_units(
         &self,
         Parameters(ConversionRequest {
@@ -36,10 +38,43 @@ impl UnitConversion {
             output_unit,
         }): Parameters<ConversionRequest>,
     ) -> Result<CallToolResult, McpError> {
-        let result = crate::convert_units(&input_value, &output_unit)
-            .map_err(|e| McpError::new(ErrorCode::INVALID_REQUEST, e.to_string(), None))?;
-
-        Ok(CallToolResult::success(vec![Content::text(result)]))
+        info!("Received conversion request");
+        
+        match crate::convert_units(&input_value, &output_unit) {
+            Ok(result) => {
+                info!(
+                    input = %input_value,
+                    output_unit = %output_unit,
+                    result = %result,
+                    "Conversion successful"
+                );
+                Ok(CallToolResult::success(vec![Content::text(result)]))
+            }
+            Err(e) => {
+                error!(
+                    input = %input_value,
+                    output_unit = %output_unit,
+                    error = %e,
+                    "Conversion failed"
+                );
+                
+                // Provide user-friendly error messages
+                let user_message = match &e {
+                    crate::ConversionError::InvalidInputFormat => {
+                        "Invalid input format. Please provide a value followed by a unit (e.g., '10 meters')".to_string()
+                    }
+                    crate::ConversionError::UnknownUnit(unit) => {
+                        format!("Unknown unit '{unit}'. Please check the spelling and try again.")
+                    }
+                    crate::ConversionError::IncompatibleUnits { from, to } => {
+                        format!("Cannot convert between {from} and {to} - they are different types of measurements.")
+                    }
+                    _ => e.to_string(),
+                };
+                
+                Err(McpError::new(ErrorCode::INVALID_REQUEST, user_message, None))
+            }
+        }
     }
 }
 

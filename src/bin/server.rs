@@ -11,13 +11,14 @@ use rmcp::transport::sse_server::{SseServer, SseServerConfig};
 use sqlx::{PgPool, postgres::PgPoolOptions};
 use std::{collections::HashMap, net::SocketAddr, time::Duration};
 use tokio_util::sync::CancellationToken;
-use tracing::info;
+use tracing::{info, error};
 use tracing_opentelemetry::OpenTelemetryLayer;
 use tracing_subscriber::{
     EnvFilter, Layer, Registry, layer::SubscriberExt, util::SubscriberInitExt,
 };
 use tracing_tree::HierarchicalLayer;
 use uuid::Uuid;
+use units::error::{self, ResultExt, get_env_var, get_optional_env_var};
 
 #[derive(Clone)]
 struct AppState {
@@ -55,6 +56,9 @@ impl cja::app_state::AppState for AppState {
 }
 
 fn main() -> color_eyre::Result<()> {
+    // Initialize error handling and panic hooks
+    error::init()?;
+    
     // Initialize Sentry for error tracking
     let _sentry_guard = setup_sentry();
 
@@ -70,7 +74,7 @@ fn main() -> color_eyre::Result<()> {
 pub async fn setup_db_pool() -> cja::Result<PgPool> {
     const MIGRATION_LOCK_ID: i64 = 0xDB_DB_DB_DB_DB_DB_DB;
 
-    let database_url = std::env::var("DATABASE_URL").wrap_err("DATABASE_URL must be set")?;
+    let database_url = get_env_var("DATABASE_URL")?;
     let pool = PgPoolOptions::new()
         .max_connections(5)
         .connect(&database_url)
@@ -100,27 +104,32 @@ pub async fn setup_db_pool() -> cja::Result<PgPool> {
 }
 
 pub fn setup_tracing(crate_name: &str) -> color_eyre::Result<EyesShutdownHandle> {
-    let rust_log = std::env::var("RUST_LOG")
-        .unwrap_or_else(|_| format!("info,{crate_name}=trace,tower_http=debug,serenity=error"));
+    let rust_log = get_optional_env_var("RUST_LOG")
+        .unwrap_or_else(|| format!("info,{crate_name}=trace,tower_http=debug,serenity=error"));
 
     let env_filter = EnvFilter::builder().parse(&rust_log).wrap_err_with(|| {
         color_eyre::eyre::eyre!("Couldn't create env filter from {}", rust_log)
     })?;
 
-    let org_id = std::env::var("EYES_ORG_ID").unwrap();
-    let app_id = std::env::var("EYES_APP_ID").unwrap();
+    let org_id = get_env_var("EYES_ORG_ID")
+        .log_error_with_context("Failed to get EYES_ORG_ID")?;
+    let app_id = get_env_var("EYES_APP_ID")
+        .log_error_with_context("Failed to get EYES_APP_ID")?;
 
-    let org_id: Uuid = org_id.parse()?;
-    let app_id: Uuid = app_id.parse()?;
+    let org_id: Uuid = org_id.parse()
+        .wrap_err("Failed to parse EYES_ORG_ID as UUID")?;
+    let app_id: Uuid = app_id.parse()
+        .wrap_err("Failed to parse EYES_APP_ID as UUID")?;
 
-    let eyes_url = std::env::var("EYES_URL").unwrap();
+    let eyes_url = get_env_var("EYES_URL")
+        .log_error_with_context("Failed to get EYES_URL")?;
 
     // Build the Eyes layer with WebSocket transport
     let (eyes_layer, shutdown_handle) =
         eyes_subscriber::EyesSubscriberBuilder::new(&eyes_url, org_id, app_id)?
             .build_with_transport(eyes_subscriber::TransportType::Http);
 
-    let opentelemetry_layer = if let Ok(honeycomb_key) = std::env::var("HONEYCOMB_API_KEY") {
+    let opentelemetry_layer = if let Some(honeycomb_key) = get_optional_env_var("HONEYCOMB_API_KEY") {
         let mut map = HashMap::<String, String>::new();
         map.insert("x-honeycomb-team".to_string(), honeycomb_key);
         map.insert("x-honeycomb-dataset".to_string(), "coreyja.com".to_string());
@@ -146,7 +155,7 @@ pub fn setup_tracing(crate_name: &str) -> color_eyre::Result<EyesShutdownHandle>
         None
     };
 
-    let stdout_layer = if std::env::var("JSON_LOGS").is_ok() {
+    let stdout_layer = if get_optional_env_var("JSON_LOGS").is_some() {
         println!("Logging to STDOUT as JSON");
 
         tracing_subscriber::fmt::layer()
@@ -189,8 +198,9 @@ async fn run_application() -> cja::Result<()> {
     info!("Spawning application tasks");
     let cancellation_token = app_state.cancellation_token.clone();
 
-    let port = std::env::var("PORT").unwrap_or_else(|_| "3001".to_string());
-    let bind_addr: SocketAddr = format!("0.0.0.0:{port}").parse()?;
+    let port = get_optional_env_var("PORT").unwrap_or_else(|| "3001".to_string());
+    let bind_addr: SocketAddr = format!("0.0.0.0:{port}").parse()
+        .wrap_err_with(|| format!("Failed to parse bind address with port {port}"))?;
     let server_config = SseServerConfig {
         bind: bind_addr,
         sse_path: "/sse".to_string(),
@@ -214,11 +224,15 @@ async fn run_application() -> cja::Result<()> {
     // Set up Ctrl+C handler
     let cancellation_token = app_state.cancellation_token.clone();
     tokio::spawn(async move {
-        tokio::signal::ctrl_c()
-            .await
-            .expect("Failed to install Ctrl+C handler");
-        info!("Received Ctrl+C, initiating shutdown...");
-        cancellation_token.cancel();
+        match tokio::signal::ctrl_c().await {
+            Ok(()) => {
+                info!("Received Ctrl+C, initiating shutdown...");
+                cancellation_token.cancel();
+            },
+            Err(e) => {
+                error!(error = %e, "Failed to install Ctrl+C handler");
+            }
+        }
     });
 
     tokio::spawn(async move {
@@ -236,9 +250,21 @@ async fn run_application() -> cja::Result<()> {
 
     let ct = sse_server.with_service(move || units.clone());
 
-    tokio::signal::ctrl_c().await?;
+    match tokio::signal::ctrl_c().await {
+        Ok(()) => {
+            info!("Shutting down gracefully...");
+        },
+        Err(e) => {
+            error!(error = %e, "Failed to wait for Ctrl+C signal");
+        }
+    }
+    
     ct.cancel();
-    eyes_shutdown_handle.shutdown().await.unwrap();
+    
+    if let Err(e) = eyes_shutdown_handle.shutdown().await {
+        error!(error = %e, "Failed to shutdown Eyes subscriber cleanly");
+    }
+    
     Ok(())
 }
 
