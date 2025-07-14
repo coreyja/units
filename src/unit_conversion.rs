@@ -4,6 +4,7 @@ use uom::si::{
     acceleration, area, energy, force, length, mass, mass_density, power,
     thermodynamic_temperature as temperature, velocity, volume,
 };
+use tracing::{error, instrument};
 
 #[derive(Debug, PartialEq)]
 pub enum ConversionError {
@@ -386,12 +387,12 @@ pub fn convert_units(input: &str, output_unit: &str) -> Result<String, Conversio
 
     // Perform conversion based on type
     let result = match input_type {
-        UnitType::Length => convert_length(parsed.value, &parsed.unit, &output_unit_lower),
-        UnitType::Mass => convert_mass(parsed.value, &parsed.unit, &output_unit_lower),
+        UnitType::Length => convert_length(parsed.value, &parsed.unit, &output_unit_lower)?,
+        UnitType::Mass => convert_mass(parsed.value, &parsed.unit, &output_unit_lower)?,
         UnitType::Temperature => {
-            convert_temperature(parsed.value, &parsed.unit, &output_unit_lower)
+            convert_temperature(parsed.value, &parsed.unit, &output_unit_lower)?
         }
-        UnitType::Volume => convert_volume(parsed.value, &parsed.unit, &output_unit_lower),
+        UnitType::Volume => convert_volume(parsed.value, &parsed.unit, &output_unit_lower)?,
         UnitType::Velocity => convert_velocity(parsed.value, &parsed.unit, &output_unit_lower),
         UnitType::Area => convert_area(parsed.value, &parsed.unit, &output_unit_lower),
         UnitType::MassDensity => {
@@ -411,53 +412,75 @@ pub fn convert_units(input: &str, output_unit: &str) -> Result<String, Conversio
     Ok(format_output(result, &output_unit_lower))
 }
 
-fn convert_length(value: f64, from_unit: &str, to_unit: &str) -> f64 {
+#[instrument(level = "debug", skip(value))]
+fn convert_length(value: f64, from_unit: &str, to_unit: &str) -> Result<f64, ConversionError> {
     let length = match from_unit {
         "meter" | "meters" => Length::new::<length::meter>(value),
         "foot" | "feet" => Length::new::<length::foot>(value),
         "kilometer" | "kilometers" => Length::new::<length::kilometer>(value),
         "mile" | "miles" => Length::new::<length::mile>(value),
-        _ => unreachable!(),
+        _ => {
+            error!(unit = from_unit, "Unexpected unit in convert_length");
+            return Err(ConversionError::UnknownUnit(from_unit.to_string()));
+        }
     };
 
     match to_unit {
-        "meter" | "meters" => length.get::<length::meter>(),
-        "foot" | "feet" => length.get::<length::foot>(),
-        "kilometer" | "kilometers" => length.get::<length::kilometer>(),
-        "mile" | "miles" => length.get::<length::mile>(),
-        _ => unreachable!(),
+        "meter" | "meters" => Ok(length.get::<length::meter>()),
+        "foot" | "feet" => Ok(length.get::<length::foot>()),
+        "kilometer" | "kilometers" => Ok(length.get::<length::kilometer>()),
+        "mile" | "miles" => Ok(length.get::<length::mile>()),
+        _ => {
+            error!(unit = to_unit, "Unexpected unit in convert_length");
+            Err(ConversionError::UnknownUnit(to_unit.to_string()))
+        }
     }
 }
 
-fn convert_mass(value: f64, from_unit: &str, to_unit: &str) -> f64 {
+#[instrument(level = "debug", skip(value))]
+fn convert_mass(value: f64, from_unit: &str, to_unit: &str) -> Result<f64, ConversionError> {
     let mass = match from_unit {
         "kilogram" | "kilograms" => Mass::new::<mass::kilogram>(value),
         "pound" | "pounds" => Mass::new::<mass::pound>(value),
-        _ => unreachable!(),
+        _ => {
+            error!(unit = from_unit, "Unexpected unit in convert_mass");
+            return Err(ConversionError::UnknownUnit(from_unit.to_string()));
+        }
     };
 
     match to_unit {
-        "kilogram" | "kilograms" => mass.get::<mass::kilogram>(),
-        "pound" | "pounds" => mass.get::<mass::pound>(),
-        _ => unreachable!(),
+        "kilogram" | "kilograms" => Ok(mass.get::<mass::kilogram>()),
+        "pound" | "pounds" => Ok(mass.get::<mass::pound>()),
+        _ => {
+            error!(unit = to_unit, "Unexpected unit in convert_mass");
+            Err(ConversionError::UnknownUnit(to_unit.to_string()))
+        }
     }
 }
 
-fn convert_temperature(value: f64, from_unit: &str, to_unit: &str) -> f64 {
+#[instrument(level = "debug", skip(value))]
+fn convert_temperature(value: f64, from_unit: &str, to_unit: &str) -> Result<f64, ConversionError> {
     let temp = match from_unit {
         "celsius" => ThermodynamicTemperature::new::<temperature::degree_celsius>(value),
         "fahrenheit" => ThermodynamicTemperature::new::<temperature::degree_fahrenheit>(value),
-        _ => unreachable!(),
+        _ => {
+            error!(unit = from_unit, "Unexpected unit in convert_temperature");
+            return Err(ConversionError::UnknownUnit(from_unit.to_string()));
+        }
     };
 
     match to_unit {
-        "celsius" => temp.get::<temperature::degree_celsius>(),
-        "fahrenheit" => temp.get::<temperature::degree_fahrenheit>(),
-        _ => unreachable!(),
+        "celsius" => Ok(temp.get::<temperature::degree_celsius>()),
+        "fahrenheit" => Ok(temp.get::<temperature::degree_fahrenheit>()),
+        _ => {
+            error!(unit = to_unit, "Unexpected unit in convert_temperature");
+            Err(ConversionError::UnknownUnit(to_unit.to_string()))
+        }
     }
 }
 
-fn convert_volume(value: f64, from_unit: &str, to_unit: &str) -> f64 {
+#[instrument(level = "debug", skip(value))]
+fn convert_volume(value: f64, from_unit: &str, to_unit: &str) -> Result<f64, ConversionError> {
     let volume = match from_unit {
         "liter" | "liters" => Volume::new::<volume::liter>(value),
         "gallon" | "gallons" => Volume::new::<volume::gallon>(value),
@@ -465,17 +488,23 @@ fn convert_volume(value: f64, from_unit: &str, to_unit: &str) -> f64 {
         "cubic foot" | "cubic feet" => Volume::new::<volume::cubic_foot>(value),
         "cubic centimeter" | "cubic centimeters" => Volume::new::<volume::cubic_centimeter>(value),
         "cubic inch" | "cubic inches" => Volume::new::<volume::cubic_inch>(value),
-        _ => unreachable!(),
+        _ => {
+            error!(unit = from_unit, "Unexpected unit in convert_volume");
+            return Err(ConversionError::UnknownUnit(from_unit.to_string()));
+        }
     };
 
     match to_unit {
-        "liter" | "liters" => volume.get::<volume::liter>(),
-        "gallon" | "gallons" => volume.get::<volume::gallon>(),
-        "cubic meter" | "cubic meters" => volume.get::<volume::cubic_meter>(),
-        "cubic foot" | "cubic feet" => volume.get::<volume::cubic_foot>(),
-        "cubic centimeter" | "cubic centimeters" => volume.get::<volume::cubic_centimeter>(),
-        "cubic inch" | "cubic inches" => volume.get::<volume::cubic_inch>(),
-        _ => unreachable!(),
+        "liter" | "liters" => Ok(volume.get::<volume::liter>()),
+        "gallon" | "gallons" => Ok(volume.get::<volume::gallon>()),
+        "cubic meter" | "cubic meters" => Ok(volume.get::<volume::cubic_meter>()),
+        "cubic foot" | "cubic feet" => Ok(volume.get::<volume::cubic_foot>()),
+        "cubic centimeter" | "cubic centimeters" => Ok(volume.get::<volume::cubic_centimeter>()),
+        "cubic inch" | "cubic inches" => Ok(volume.get::<volume::cubic_inch>()),
+        _ => {
+            error!(unit = to_unit, "Unexpected unit in convert_volume");
+            Err(ConversionError::UnknownUnit(to_unit.to_string()))
+        }
     }
 }
 
